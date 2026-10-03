@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Rust HTTP Server</title>
+  <meta name="description" content="A hand-rolled HTTP/1.1 server written in pure Rust using only std.">
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <header>
+    <div class="badge">🦀 Pure Rust · Zero Dependencies</div>
+    <h1>Rust HTTP Server</h1>
+    <p class="subtitle">A hand-rolled HTTP/1.1 server built from raw TCP sockets — no frameworks, no crates.</p>
+  </header>
+
+  <main>
+    <section class="cards">
+      <div class="card">
+        <span class="icon">⚡</span>
+        <h2>Raw TCP</h2>
+        <p>Every byte parsed manually using <code>std::net::TcpListener</code>. No magic.</p>
+      </div>
+      <div class="card">
+        <span class="icon">🔒</span>
+        <h2>Safe by Default</h2>
+        <p>Path traversal sanitised. <code>../</code> escapes are blocked at parse time.</p>
+      </div>
+      <div class="card">
+        <span class="icon">⚙️</span>
+        <h2>Keep-Alive</h2>
+        <p>HTTP/1.1 persistent connections with a 5-second idle timeout per thread.</p>
+      </div>
+      <div class="card">
+        <span class="icon">🗂️</span>
+        <h2>ETag Caching</h2>
+        <p>Automatic <code>ETag</code> + <code>304 Not Modified</code> support. Saves bandwidth on repeat visits.</p>
+      </div>
+    </section>
+
+    <section class="endpoints">
+      <h2>Try it out</h2>
+      <table>
+        <thead>
+          <tr><th>Command</th><th>Expected</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>curl http://localhost:7878/</code></td>
+            <td>200 — this page</td>
+          </tr>
+          <tr>
+            <td><code>curl http://localhost:7878/missing</code></td>
+            <td>404 Not Found</td>
+          </tr>
+          <tr>
+            <td><code>curl -I http://localhost:7878/</code></td>
+            <td>200 HEAD (no body)</td>
+          </tr>
+          <tr>
+            <td><code>curl -X POST -d "hello=world" http://localhost:7878/echo</code></td>
+            <td>200 echo</td>
+          </tr>
+          <tr>
+            <td><code>curl -X DELETE http://localhost:7878/</code></td>
+            <td>405 Method Not Allowed</td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+  </main>
+
+  <footer>
+    <p>Built with ❤️ in Rust · <code>std</code> only · HTTP/1.1</p>
+  </footer>
+</body>
+</html>

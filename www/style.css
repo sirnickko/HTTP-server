@@ -1,0 +1,180 @@
+/* ── Reset & base ─────────────────────────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg:        #0f1117;
+  --surface:   #1a1d27;
+  --surface2:  #22263a;
+  --border:    #2e3250;
+  --accent:    #f74c00;    /* Rust orange */
+  --accent2:   #7b61ff;
+  --text:      #e2e4f0;
+  --muted:     #8b8fa8;
+  --code-bg:   #12141e;
+  --radius:    10px;
+  --shadow:    0 4px 24px rgba(0,0,0,.45);
+}
+
+html { scroll-behavior: smooth; }
+
+body {
+  font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  line-height: 1.65;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+/* ── Header ──────────────────────────────────────────────────────────────── */
+header {
+  text-align: center;
+  padding: 5rem 1.5rem 3.5rem;
+  background:
+    radial-gradient(ellipse 80% 50% at 50% -10%, rgba(247,76,0,.18), transparent),
+    var(--bg);
+}
+
+.badge {
+  display: inline-block;
+  background: rgba(247,76,0,.15);
+  border: 1px solid rgba(247,76,0,.35);
+  color: var(--accent);
+  border-radius: 999px;
+  padding: .3rem 1rem;
+  font-size: .8rem;
+  font-weight: 600;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  margin-bottom: 1.2rem;
+}
+
+.badge.error {
+  background: rgba(239,68,68,.15);
+  border-color: rgba(239,68,68,.35);
+  color: #ef4444;
+  font-size: 2rem;
+  padding: .4rem 1.4rem;
+}
+
+header h1 {
+  font-size: clamp(2rem, 5vw, 3.6rem);
+  font-weight: 800;
+  letter-spacing: -.02em;
+  background: linear-gradient(135deg, #fff 30%, var(--accent) 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.subtitle {
+  margin-top: .75rem;
+  color: var(--muted);
+  font-size: 1.1rem;
+  max-width: 560px;
+  margin-inline: auto;
+}
+
+/* ── Main ────────────────────────────────────────────────────────────────── */
+main {
+  flex: 1;
+  width: min(960px, 100%);
+  margin-inline: auto;
+  padding: 3rem 1.5rem;
+}
+
+/* ── Feature cards ───────────────────────────────────────────────────────── */
+.cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 1.25rem;
+  margin-bottom: 3.5rem;
+}
+
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 1.6rem 1.4rem;
+  transition: border-color .2s, transform .2s, box-shadow .2s;
+}
+
+.card:hover {
+  border-color: var(--accent);
+  transform: translateY(-3px);
+  box-shadow: var(--shadow);
+}
+
+.card .icon { font-size: 1.9rem; display: block; margin-bottom: .6rem; }
+
+.card h2 {
+  font-size: 1.05rem;
+  font-weight: 700;
+  margin-bottom: .4rem;
+}
+
+.card p { color: var(--muted); font-size: .92rem; }
+
+/* ── Endpoints table ─────────────────────────────────────────────────────── */
+.endpoints h2 {
+  font-size: 1.4rem;
+  font-weight: 700;
+  margin-bottom: 1rem;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+
+thead tr { background: var(--surface2); }
+
+th, td {
+  padding: .75rem 1.1rem;
+  text-align: left;
+  border-bottom: 1px solid var(--border);
+  font-size: .9rem;
+}
+
+tr:last-child td { border-bottom: none; }
+
+th { color: var(--muted); font-weight: 600; font-size: .8rem; text-transform: uppercase; letter-spacing: .05em; }
+
+tr:hover td { background: rgba(255,255,255,.03); }
+
+/* ── Code ────────────────────────────────────────────────────────────────── */
+code {
+  font-family: 'Cascadia Code', 'Fira Code', 'Consolas', monospace;
+  background: var(--code-bg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: .15em .45em;
+  font-size: .85em;
+  color: #c9d1d9;
+}
+
+/* ── 404 box ─────────────────────────────────────────────────────────────── */
+.not-found-box {
+  text-align: center;
+  padding: 3rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.not-found-box a { color: var(--accent); text-decoration: none; font-weight: 600; }
+.not-found-box a:hover { text-decoration: underline; }
+
+/* ── Footer ──────────────────────────────────────────────────────────────── */
+footer {
+  text-align: center;
+  padding: 1.5rem;
+  color: var(--muted);
+  font-size: .85rem;
+  border-top: 1px solid var(--border);
+}

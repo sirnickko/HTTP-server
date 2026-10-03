@@ -1,0 +1,7 @@
+[package]
+name = "http-server"
+version = "0.1.0"
+edition = "2021"
+
+# Zero external dependencies — pure std only
+[dependencies]
