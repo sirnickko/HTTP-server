@@ -1,1 +1,9 @@
 /target
+
+# TLS certificate and private key files — never commit private keys!
+*.pem
+*.key
+*.crt
+*.cer
+*.p12
+*.pfx
