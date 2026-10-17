@@ -1,7 +1,14 @@
 [package]
 name = "http-server"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
 
-# Zero external dependencies — pure std only
+# ── TLS stack ────────────────────────────────────────────────────────────────
+# rustls        — pure-Rust TLS 1.2/1.3 (no OpenSSL C binding)
+# rustls-pemfile — PEM parser for cert chain + private key files
+# rcgen          — generates a self-signed X.509 cert at start-up
+#                  (swap in a real cert via --cert/--key for production)
 [dependencies]
+rustls         = { version = "0.23", default-features = false, features = ["ring", "std", "tls12"] }
+rustls-pemfile = "2"
+rcgen          = "0.13"

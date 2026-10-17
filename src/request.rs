@@ -1,7 +1,6 @@
 use std::{
     collections::HashMap,
     io::{self, BufRead, BufReader, Read},
-    net::TcpStream,
 };
 
 
@@ -56,7 +55,9 @@ impl From<io::Error> for ParseError {
 ///
 /// Returns `Err(ParseError::ConnectionClosed)` when the client has cleanly
 /// closed the connection (zero-byte read on a keep-alive stream).
-pub fn parse(reader: &mut BufReader<&TcpStream>) -> Result<Request, ParseError> {
+/// Works over any `Read` implementor — plain `TcpStream` or a TLS-wrapped
+/// stream both satisfy the bound, so no specialised code is needed.
+pub fn parse<R: Read>(reader: &mut BufReader<R>) -> Result<Request, ParseError> {
 
     // ── 1. Request line ──────────────────────────────────────────────────────
     let mut request_line = String::new();
