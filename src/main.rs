@@ -1,16 +1,49 @@
 mod handlers;
 mod logger;
 mod mime;
+mod pool;
+mod redirect;
 mod request;
 mod response;
 mod server;
 mod tls;
 
-use std::{env, net::TcpListener, sync::Arc};
+use std::{
+    env,
+    net::{TcpListener, TcpStream},
+    process,
+    sync::Arc,
+    thread,
+};
+
+use pool::ThreadPool;
+
+/// Worker threads handling connections. A keep-alive connection occupies its
+/// worker while idle (up to the 5 s timeout), so this is also roughly the
+/// number of clients that can be connected at once.
+const DEFAULT_THREADS: usize = 64;
+/// Connections allowed to wait for a free worker, per worker. Beyond that,
+/// new connections are refused instead of queueing without bound.
+const QUEUE_PER_WORKER: usize = 4;
+
+const USAGE: &str = "\
+Usage: http-server [OPTIONS]
+
+  -s, --https-port <N>    HTTPS port                       (default 4433)
+  -p, --port <N>          HTTP port, redirects to HTTPS    (default 8080)
+      --cert <FILE>       PEM certificate or chain         (needs --key)
+      --key <FILE>        PEM private key                  (needs --cert)
+      --threads <N>       Worker threads for connections   (default 64)
+  -h, --help              Show this help
+
+Without --cert and --key a self-signed certificate is generated in memory.";
 
 fn main() {
     // ── CLI flags ─────────────────────────────────────────────────────────────
-    let args = Args::parse();
+    let args = Args::parse().unwrap_or_else(|e| {
+        eprintln!("Error: {e}\n\n{USAGE}");
+        process::exit(2);
+    });
 
     // ── TLS config ────────────────────────────────────────────────────────────
     //
@@ -38,11 +71,9 @@ fn main() {
         }
         _ => {
             eprintln!("Error: --cert and --key must be provided together.");
-            std::process::exit(1);
+            process::exit(1);
         }
     };
-
-    let tls_config = Arc::new((*tls_config).clone());
 
     // ── Bind listeners ────────────────────────────────────────────────────────
     let https_addr = format!("0.0.0.0:{}", args.https_port);
@@ -50,16 +81,20 @@ fn main() {
 
     let https_listener = TcpListener::bind(&https_addr).unwrap_or_else(|e| {
         eprintln!("Error: cannot bind HTTPS to {https_addr}: {e}");
-        std::process::exit(1);
+        process::exit(1);
     });
 
     let http_listener = TcpListener::bind(&http_addr).unwrap_or_else(|e| {
         eprintln!("Error: cannot bind HTTP to {http_addr}: {e}");
-        std::process::exit(1);
+        process::exit(1);
     });
+
+    // One pool shared by both listeners: the thread count is a global cap.
+    let pool = ThreadPool::new(args.threads, args.threads * QUEUE_PER_WORKER);
 
     // ── Banner ────────────────────────────────────────────────────────────────
     let cert_source = if args.cert.is_some() { "PEM files" } else { "self-signed (rcgen)" };
+    let workers = format!("{} threads", args.threads);
     println!("╔══════════════════════════════════════════════════╗");
     println!("║         Rust HTTPS Server  v0.2                 ║");
     println!("╠══════════════════════════════════════════════════╣");
@@ -68,44 +103,47 @@ fn main() {
     println!("║  HTTP  → auto-redirects to HTTPS                ║");
     println!("║  TLS cert  {cert_source:<37}║");
     println!("║  HSTS      max-age=31536000; includeSubDomains  ║");
+    println!("║  Workers   {workers:<37}║");
     println!("║  Serving from  ./www/                           ║");
     println!("║  Press Ctrl+C to stop                           ║");
     println!("╚══════════════════════════════════════════════════╝");
     println!();
 
-    // ── Spawn HTTP redirect listener on its own thread ────────────────────────
+    // ── HTTP redirect listener on its own thread ──────────────────────────────
     let https_port_for_redirect = args.https_port;
-    std::thread::spawn(move || {
-        for stream in http_listener.incoming() {
-            match stream {
-                Ok(s) => {
-                    std::thread::spawn(move || {
-                        server::handle_http_redirect(s, https_port_for_redirect);
-                    });
-                }
-                Err(e) => eprintln!("HTTP accept error: {e}"),
-            }
-        }
+    let redirect_pool = pool.clone();
+    thread::spawn(move || {
+        accept_loop(http_listener, &redirect_pool, move |s| {
+            server::handle_http_redirect(s, https_port_for_redirect);
+        });
     });
 
     // ── HTTPS main loop ───────────────────────────────────────────────────────
-    for stream in https_listener.incoming() {
-        match stream {
-            Ok(tcp) => {
-                // Set the read timeout on the raw TCP socket BEFORE wrapping
-                // in TLS — rustls propagates reads to the inner stream, so
-                // this timeout applies to the TLS record reads as well.
-                tcp.set_read_timeout(Some(std::time::Duration::from_secs(5))).ok();
+    accept_loop(https_listener, &pool, move |tcp| {
+        server::handle_https(tcp, Arc::clone(&tls_config));
+    });
+}
 
-                let cfg = Arc::clone(&tls_config);
-                std::thread::spawn(move || {
-                    match tls::accept(cfg, tcp) {
-                        Ok(tls_stream) => server::handle_connection(tls_stream),
-                        Err(e)        => eprintln!("TLS handshake error: {e}"),
-                    }
-                });
+/// Accepts connections forever and hands each one to the worker pool.
+///
+/// If every worker is busy and the queue is full, the connection is closed at
+/// once. Refusing early keeps the server responsive for the clients it already
+/// has, rather than slowing down for everyone.
+fn accept_loop(
+    listener: TcpListener,
+    pool: &ThreadPool,
+    handler: impl Fn(TcpStream) + Send + Sync + 'static,
+) {
+    let handler = Arc::new(handler);
+    for stream in listener.incoming() {
+        match stream {
+            Ok(s) => {
+                let handler = Arc::clone(&handler);
+                if !pool.try_execute(move || handler(s)) {
+                    eprintln!("Overloaded: every worker is busy and the queue is full, connection refused");
+                }
             }
-            Err(e) => eprintln!("HTTPS accept error: {e}"),
+            Err(e) => eprintln!("Accept error: {e}"),
         }
     }
 }
@@ -121,52 +159,62 @@ struct Args {
     cert: Option<String>,
     /// Path to a PEM private key (optional; self-signed used if absent)
     key:  Option<String>,
+    /// Worker threads serving connections
+    threads: usize,
 }
 
 impl Args {
-    fn parse() -> Self {
-        let raw: Vec<String> = env::args().collect();
+    /// Parses the command line. Every option accepts `--name value` or
+    /// `--name=value`. Unknown options and bad values are errors rather than
+    /// being silently replaced by defaults.
+    fn parse() -> Result<Self, String> {
         let mut args = Args {
             https_port: 4433,
             http_port:  8080,
             cert: None,
             key:  None,
+            threads: DEFAULT_THREADS,
         };
 
-        let mut i = 1;
-        while i < raw.len() {
-            match raw[i].as_str() {
-                "--https-port" | "-s" => {
-                    if let Some(v) = raw.get(i + 1) {
-                        args.https_port = v.parse().unwrap_or(4433);
-                        i += 1;
-                    }
+        let mut raw = env::args().skip(1);
+        while let Some(arg) = raw.next() {
+            let (flag, mut inline) = match arg.split_once('=') {
+                Some((f, v)) if f.starts_with("--") => (f.to_string(), Some(v.to_string())),
+                _                                   => (arg, None),
+            };
+
+            // Value for the current flag: the `=value` part, or else the next argument.
+            let mut value = || -> Result<String, String> {
+                inline
+                    .take()
+                    .or_else(|| raw.next())
+                    .ok_or_else(|| format!("{flag} needs a value"))
+            };
+
+            match flag.as_str() {
+                "--https-port" | "-s"             => args.https_port = number(&flag, &value()?)?,
+                "--port" | "-p" | "--http-port"   => args.http_port = number(&flag, &value()?)?,
+                "--threads"                       => args.threads = number(&flag, &value()?)?,
+                "--cert"                          => args.cert = Some(value()?),
+                "--key"                           => args.key = Some(value()?),
+                "--help" | "-h" => {
+                    println!("{USAGE}");
+                    process::exit(0);
                 }
-                "--port" | "-p" | "--http-port" => {
-                    if let Some(v) = raw.get(i + 1) {
-                        args.http_port = v.parse().unwrap_or(8080);
-                        i += 1;
-                    }
-                }
-                "--cert" => {
-                    args.cert = raw.get(i + 1).cloned();
-                    i += 1;
-                }
-                "--key" => {
-                    args.key = raw.get(i + 1).cloned();
-                    i += 1;
-                }
-                arg if arg.starts_with("--https-port=") => {
-                    args.https_port = arg["--https-port=".len()..].parse().unwrap_or(4433);
-                }
-                arg if arg.starts_with("--port=") => {
-                    args.http_port = arg["--port=".len()..].parse().unwrap_or(8080);
-                }
-                _ => {}
+                other => return Err(format!("unknown option: {other}")),
             }
-            i += 1;
         }
 
-        args
+        if args.threads == 0 {
+            return Err("--threads must be at least 1".into());
+        }
+        if args.https_port == args.http_port {
+            return Err("the HTTP and HTTPS ports must be different".into());
+        }
+        Ok(args)
     }
+}
+
+fn number<T: std::str::FromStr>(flag: &str, raw: &str) -> Result<T, String> {
+    raw.parse().map_err(|_| format!("{flag} expects a number, got '{raw}'"))
 }
